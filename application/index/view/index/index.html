@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=3, minimum-scale=1, user-scalable=no"/>
+
+</head>
+<link rel="stylesheet" href="/static/layui/css/layui.css">
+<link rel="stylesheet" href="/static/font-awesome/css/font-awesome.min.css">
+<link rel="stylesheet" href="/static/css/index.css">
+<body class="shade">
+<div class="dirbox">
+    <form action="">
+        <div class="sel">
+            <i class="layui-icon layui-icon-return" id="last"></i>
+            <input type="text" name="path" readonly id="path" />
+        </div>
+
+        <input type="hidden" name="last" value="" />
+    </form>
+    <div class="oper">
+        <div class="tool">
+            <div id="uploadbox">上传</div>
+            <div id="mkdir">新建目录</div>
+            <div id="refresh"><i class="layui-icon layui-icon-refresh"></i></div>
+        </div>
+        <div class="tool" id="tool" style="display: none">
+            <div>删除</div>
+        </div>
+    </div>
+    <table id="getscandir" lay-filter="getscandir">
+    </table>
+</div>
+
+
+
+<script src="/static/js/jquery-3.4.1.min.js"></script>
+<script src="/static/js/mouseRight.min.js"></script>
+<script src="/static/layui/layui.js"></script>
+<script>
+
+    layui.use(['layer','table','upload'], function(){
+        var layer = layui.layer;
+        var table = layui.table;
+        var upload = layui.upload;
+
+        $("#uploadbox").on('click',function(){
+            var html = '<div class="layui-upload" style="padding: 20px"><button type="button" class="layui-btn layui-btn-sm upload">选择多文件</button><div class="layui-upload-list"><table class="layui-table"><thead><tr><th>文件名</th><th>大小</th><th>状态</th><th>操作</th></tr></thead><tbody id="demoList"></tbody></table></div><button type="button" class="layui-btn layui-btn-sm layui-btn-normal" id="testListAction">开始上传</button></div>';
+            layer.open({
+                type: 1,
+                title: "上传文件",
+                closeBtn: 1,
+                area: ['600px','500px'],
+                shadeClose: false,
+                content: html
+            });
+
+            //多文件列表示例
+            var demoListView = $('#demoList')
+                    ,uploadListIns = upload.render({
+                elem: '.upload'
+                ,data: {path:function(){
+                    return $('#path').val();
+                }}
+                ,url: '<{:Url("upload_file")}>'
+                ,accept: 'file'
+                ,multiple: true
+                ,auto: false
+                ,size: 1024*50
+                ,bindAction: '#testListAction'
+                ,choose: function(obj){
+                    var files = this.files = obj.pushFile(); //将每次选择的文件追加到文件队列
+                    //读取本地文件
+                    obj.preview(function(index, file, result){
+                        var tr = $(['<tr id="upload-'+ index +'">'
+                            ,'<td>'+ file.name +'</td>'
+                            ,'<td>'+ (file.size/1014).toFixed(1) +'kb</td>'
+                            ,'<td>等待上传</td>'
+                            ,'<td>'
+                            ,'<button class="layui-btn layui-btn-xs demo-reload layui-hide">重传</button>'
+                            ,'<button class="layui-btn layui-btn-xs layui-btn-danger demo-delete">删除</button>'
+                            ,'</td>'
+                            ,'</tr>'].join(''));
+
+                        //单个重传
+                        tr.find('.demo-reload').on('click', function(){
+                            obj.upload(index, file);
+                        });
+
+                        //删除
+                        tr.find('.demo-delete').on('click', function(){
+                            delete files[index]; //删除对应的文件
+                            tr.remove();
+                            uploadListIns.config.elem.next()[0].value = ''; //清空 input file 值，以免删除后出现同名文件不可选
+                        });
+
+                        demoListView.append(tr);
+                    });
+                }
+                ,done: function(res, index, upload){
+                    if(res.code == 0){ //上传成功
+                        var tr = demoListView.find('tr#upload-'+ index)
+                                ,tds = tr.children();
+                        tds.eq(2).html('<span style="color: #5FB878;">上传成功</span>');
+                        tds.eq(3).html(''); //清空操作
+                        get_scandir();
+                        return delete this.files[index]; //删除文件队列已经上传成功的文件
+                    }
+                    this.error(index, upload);
+                }
+                ,error: function(index, upload){
+                    var tr = demoListView.find('tr#upload-'+ index)
+                            ,tds = tr.children();
+                    tds.eq(2).html('<span style="color: #FF5722;">上传失败</span>');
+                    tds.eq(3).find('.demo-reload').removeClass('layui-hide'); //显示重传
+                }
+            });
+        });
+
+        $("#refresh").on("click", function () {
+            get_scandir();
+        });
+
+        $("#last").on("click", function () {
+            $("input[name=last]").val(true);
+
+            get_scandir();
+
+            $("input[name=last]").val("");
+        });
+
+        $("#mkdir").on('click',function(){
+
+            layer.prompt({title:"新建目录"},function(val, index){
+                //layer.msg('得到了'+val);
+                var rez = '^[^\\/:\*\?""<>|]{1,120}$';
+
+                if(!val.match(rez)){
+                    return layer.msg('文件名不能包含下列任何字符：\ / : * ? " < > |',{icon:5});
+                }
+
+                var path = $("input[name=path]").val();
+
+                $.post("<{:Url('add_dir')}>",{path:path,dirname:val},function(data){
+                    layer.close(index);
+                    if(data.code == 200){
+                        $("#path").val(data.path);
+
+                        get_scandir();
+
+                        return layer.msg(data.msg,{icon:6});
+                    }else{
+                        return layer.msg(data.msg,{icon:5});
+                    }
+                },"json")
+            });
+
+        })
+
+        table.on('checkbox(getscandir)', function(obj){
+            var checkStatus = table.checkStatus('getscandir');
+
+            var tool = $("#tool");
+            if(checkStatus.data != ""){
+                tool.show();
+            }else{
+                tool.hide();
+            }
+
+            console.log(checkStatus);
+            //console.log(obj)
+        });
+
+        function edname(filename,filepath)
+        {
+            if(filename==undefined||filepath==undefined){
+                return false;
+            }
+
+            var name = filename;
+            var path = filepath;
+
+            layer.prompt({
+                formType: 3,
+                value: name,
+                title: "重命名"
+            }, function(value, index, elem){
+                // alert(value); //得到value
+                $.post("<{:Url('editfile')}>",{path:path,old_name:name,new_name:value},function(data){
+                    layer.close(index);
+                    if(data.code == 200){
+
+                        get_scandir();
+
+                        return layer.msg(data.msg,{icon:6});
+                    }else{
+                        return layer.msg(data.msg,{icon:5});
+                    }
+                },"json")
+            });
+        }
+
+        function deldirfunc(filename,filepath)
+        {
+            if(filename==undefined||filepath==undefined){
+                return false;
+            }
+
+            var name = filename;
+            var path = filepath;
+
+            layer.confirm('确认要删除 [ '+name+' ] 吗？', {
+                title: '提示',
+                btn : [ '确定', '取消' ]//按钮
+            }, function(index) {
+                $.post("<{:Url('delfile')}>",{path:path,name:name},function(data){
+                    layer.close(index);
+                    if(data.code == 200){
+
+                        get_scandir();
+
+                        return layer.msg(data.msg,{icon:6});
+                    }else{
+                        return layer.msg(data.msg,{icon:5});
+                    }
+                },"json")
+            });
+        }
+        function init(){
+            /*反复调用 出现多个*/
+            $(".wrap-ms-right").remove();
+
+            $('.layui-table-body table tbody').mouseRight({menu: [{
+                itemName: "重命名",
+                callback: function(filename,filepath) {
+                    edname(filename,filepath)
+                }
+            },{
+                itemName: "删除",
+                callback: function(filename,filepath) {
+                    deldirfunc(filename,filepath)
+                }
+            }]});
+
+        }
+
+
+        $(document).on('click','.getfile',function () {
+            var path = $(this).data("path");
+            //console.log(path);
+            $("#path").val(path);
+            get_scandir();
+        })
+
+        $(document).on('click','.layui-table-body .edname',function () {
+            //layer.closeAll();
+            var filename = $(this).data("filename");
+            var filepath = $(this).data("filepath");
+            edname(filename,filepath);
+        })
+
+        $(document).on('click','.layui-table-body .deldirfunc',function () {
+            //layer.closeAll();
+            var filename = $(this).data("filename");
+            var filepath = $(this).data("filepath");
+            deldirfunc(filename,filepath);
+        })
+
+        function get_scandir(){
+
+            //var index = layer.load(0, {shade: false});
+
+            var path = $("input[name=path]").val();
+            var last = $("input[name=last]").val();
+            table.render({
+                elem: '#getscandir'
+                ,url:"<{:Url('get_scandir')}>"
+                ,where: {path:path,last:last}
+                ,skin: 'line'
+                ,cols: [[
+                    {type:'checkbox'}
+                    ,{field:'filename', title: '文件名', sort: true}
+                    ,{field:'updatetime', width:200, title: '修改时间', sort: true,align:'center'}
+                    ,{field:'size', width:180, title: '大小',align:'center'}
+                    ,{field:'role', width:80, title: '权限',align:'center'}
+                    ,{field:'operator', title: '操作',align:'center'}
+                    ,{field:'name', hide:true}
+                    ,{field:'path', hide:true}
+                ]]
+                ,done: function(res){
+                    init();
+
+                    $("#path").val(res.path)
+                }
+            });
+            /*$.post("<{:Url('get_scandir')}>",data,function(data){
+
+                layer.close(index);
+
+                //$("#getscandir").html(data.data);
+
+
+                $(".getfile").on("click", function () {
+                    var path = $(this).data("path");
+                    //console.log(path);
+                    $("#path").val(path);
+                    get_scandir();
+                })
+
+                $("#path").val(data.path);
+
+                return false;
+            })*/
+        }
+        get_scandir();
+
+
+
+    })
+    function previewImg(obj) {
+        var img = new Image();
+        img.src = obj.src;
+        //alert(img.src);
+
+
+        var width = obj.naturalWidth;
+        var height = obj.naturalHeight;
+
+        if(height >= 800){
+            height = "600px";
+            width = "auto";
+        }else{
+            height = height+"px";
+        }
+
+        if(width >= 1280){
+            height = "auto";
+            width = "1000px";
+        }else{
+            width = width+"px";
+        }
+
+
+        var imgHtml = "<img width='"+width+"' height='"+height+"' src='" + obj.src + "' />";
+        //捕获页
+        layer.open({
+            type: 1,
+            closeBtn: false,
+            shadeClose: true,
+            title: false, //不显示标题
+            //area:['600px','500px'],
+            area: [width, height],
+            content: imgHtml, //捕获的元素，注意：最好该指定的元素要存放在body最外层，否则可能被其它的相对元素所影响
+            cancel: function () {
+                //layer.msg('捕获就是从页面已经存在的元素上，包裹layer的结构', { time: 5000, icon: 6 });
+            }
+        });
+    }
+
+
+</script>
+
+</body>
+</html>
