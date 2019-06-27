@@ -211,14 +211,8 @@
                     path = path?path:data[i]['path'];
                 }
 
-                $("#down_zip input[name=name]").val(name);
-                $("#down_zip input[name=path]").val(path);
 
-                $("#down_zip").submit();
-
-
-                return false;
-
+                downloadfunc(name,path)
 
         });
 
@@ -226,6 +220,16 @@
 
             checkstatus();
         });
+
+        function downloadfunc(name,path){
+            $("#down_zip input[name=name]").val(name);
+            $("#down_zip input[name=path]").val(path);
+
+            $("#down_zip").submit();
+
+
+            return false;
+        }
 
         function checkstatus(){
             var checkStatus = table.checkStatus('getscandir');
@@ -300,6 +304,11 @@
             $(".wrap-ms-right").remove();
 
             $('.layui-table-body table tbody').mouseRight({menu: [{
+                itemName: "下载",
+                callback: function(filename,filepath,url) {
+                    if(url){window.open(url)}else{downloadfunc(filename,filepath)}
+                }
+            },{
                 itemName: "重命名",
                 callback: function(filename,filepath) {
                     edname(filename,filepath)
@@ -309,7 +318,8 @@
                 callback: function(filename,filepath) {
                     deldirfunc(filename,filepath)
                 }
-            }]});
+            }]
+            });
 
         }
 
