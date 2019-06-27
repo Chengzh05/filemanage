@@ -169,7 +169,8 @@ class Index extends Controller
     {
         if(input("_m")){
             $_m = input('_m');
-            $filename = base64_decode($_m);
+            $filename = urldecode(base64_decode($_m));
+
             if(file_exists($filename)){
 
                 $fname = substr($filename,strripos($filename,'/')+1);
@@ -182,7 +183,7 @@ class Index extends Controller
             }
         }
 
-        abort("404");
+        //abort("404");
     }
 
     public function download_zip()
@@ -202,14 +203,12 @@ class Index extends Controller
                 $name = explode(',',$name);
 
 
-                $file_name = $this->zipdownload($path,$name,$downname);
+                $file_name = $this->xm_zipdownload($path,$name,$downname);
 
                 $fp=fopen($file_name,"r");
 
-                $file_size=filesize($file_name);//获取文件的字节
+                $file_size=filesize($file_name);
 
-
-                //下载文件需要用到的头
 
                 Header("Content-type: application/octet-stream");
 
@@ -243,13 +242,11 @@ class Index extends Controller
 
             }
 
-
-
         }
     }
 
     /*打包下载*/
-    public function zipdownload($file_path,$file_path_name,$downname)
+    public function xm_zipdownload($file_path,$file_path_name,$downname)
     {
         $file_template = $this->root_dir.'/../zip/empty.zip';
         $file_name = $this->root_dir.'/../zip/'.$downname;//把你打包后zip所存放的目录
@@ -352,6 +349,7 @@ class Index extends Controller
         return $return;
     }
 
+    /*创建文件夹*/
     public function xm_mkdir($name,$path,$recursive=false){
 
         if(is_dir($path)){
@@ -365,7 +363,7 @@ class Index extends Controller
 
     }
 
-
+    /*查询目录*/
     public function xm_scandir()
     {
         $dir = $this->root_dir.$this->sel_dir;
@@ -402,7 +400,7 @@ class Index extends Controller
                         }else{
                             $tmp['filename']= "<img src='/static/images/fileico.png' alt=''> ".$child_dir;
                         }
-                        $tmp['operator']= '<div class="opermt"><span class="edname" data-filename="'.$child_dir.'" data-filepath="'.$this->sel_dir.'/">重命名</span> | <a target="_blank" href="'.url('download')."?_m=".base64_encode($dir.'/'.$child_dir).'">下载</a> | <span class="deldirfunc" data-filename="'.$child_dir.'" data-filepath="'.$this->sel_dir.'/">删除</span></div>';
+                        $tmp['operator']= '<div class="opermt"><span class="edname" data-filename="'.$child_dir.'" data-filepath="'.$this->sel_dir.'/">重命名</span> | <a target="_blank" href="'.url('download')."?_m=".base64_encode(urlencode($dir.'/'.$child_dir)).'">下载</a> | <span class="deldirfunc" data-filename="'.$child_dir.'" data-filepath="'.$this->sel_dir.'/">删除</span></div>';
 
                     }
 
