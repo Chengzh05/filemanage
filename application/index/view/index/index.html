@@ -25,7 +25,8 @@
             <div id="refresh"><i class="layui-icon layui-icon-refresh"></i></div>
         </div>
         <div class="tool" id="tool" style="display: none">
-            <div>删除</div>
+            <div id="down">下载</div>
+            <div id="delall">删除</div>
         </div>
     </div>
     <table id="getscandir" lay-filter="getscandir">
@@ -33,6 +34,13 @@
 </div>
 
 
+<!--打包下载-->
+<div style="display: none">
+    <form id="down_zip" method="post" action="<{:Url('download_zip')}>">
+        <input type="text" name="name" value="">
+        <input type="text" name="path" value="">
+    </form>
+</div>
 
 <script src="/static/js/jquery-3.4.1.min.js"></script>
 <script src="/static/js/mouseRight.min.js"></script>
@@ -155,9 +163,71 @@
                 },"json")
             });
 
-        })
+        });
+
+        $("#delall").on('click',function(){
+
+            layer.confirm('确认要删除选择文件或者文件夹吗？', {
+                title: '提示',
+                btn : [ '确定', '取消' ]//按钮
+            }, function(index) {
+                var checkStatus = table.checkStatus('getscandir');
+
+                var data = checkStatus.data;
+
+                var path = [];
+
+                for(var i in data){
+                    path.push(data[i]['path']+data[i]['name']);
+                }
+
+                $.post("<{:Url('delallfile')}>",{path:path},function(data){
+                    if(data.code == 200){
+                        get_scandir();
+                        return layer.msg(data.msg,{icon:6});
+                    }else{
+                        return layer.msg(data.msg,{icon:5});
+                    }
+                },"json");
+
+                return false;
+            });
+
+
+        });
+
+        $("#down").on('click',function(){
+
+                var checkStatus = table.checkStatus('getscandir');
+
+                var data = checkStatus.data;
+
+                var name = [];
+
+                var path = '';
+
+                for(var i in data){
+                    name.push(data[i]['name']);
+                    path = path?path:data[i]['path'];
+                }
+
+                $("#down_zip input[name=name]").val(name);
+                $("#down_zip input[name=path]").val(path);
+
+                $("#down_zip").submit();
+
+
+                return false;
+
+
+        });
 
         table.on('checkbox(getscandir)', function(obj){
+
+            checkstatus();
+        });
+
+        function checkstatus(){
             var checkStatus = table.checkStatus('getscandir');
 
             var tool = $("#tool");
@@ -168,8 +238,7 @@
             }
 
             console.log(checkStatus);
-            //console.log(obj)
-        });
+        }
 
         function edname(filename,filepath)
         {
@@ -289,6 +358,8 @@
                 ]]
                 ,done: function(res){
                     init();
+
+                    checkstatus();
 
                     $("#path").val(res.path)
                 }

@@ -2,6 +2,7 @@
 namespace app\index\controller;
 
 use think\Controller;
+use ZipArchive;
 
 class Index extends Controller
 {
@@ -143,6 +144,27 @@ class Index extends Controller
         }
     }
 
+    /*批量删除*/
+    public function delallfile()
+    {
+        if(input("post.")){
+
+            $paths = input("post.path/a");
+
+            try{
+                if(count($paths)){
+                    foreach($paths as $v){
+                        $res = $this->xm_deldir($this->root_dir.$v);
+                    }
+                }
+
+                return json($res);
+            }catch(\Exception $e){
+                return json(['code'=>500,"msg"=>$e->getMessage()]);
+            }
+        }
+    }
+
     public function download()
     {
         if(input("_m")){
@@ -161,6 +183,113 @@ class Index extends Controller
         }
 
         abort("404");
+    }
+
+    public function download_zip()
+    {
+        if(input("post.")){
+
+            $path = input("post.path");
+            $name = input("post.name");
+            try{
+
+                $downname = "打包下载_".date("mHis").".zip";
+
+                if(!$name){
+                    exit;
+                }
+
+                $name = explode(',',$name);
+
+
+                $file_name = $this->zipdownload($path,$name,$downname);
+
+                $fp=fopen($file_name,"r");
+
+                $file_size=filesize($file_name);//获取文件的字节
+
+
+                //下载文件需要用到的头
+
+                Header("Content-type: application/octet-stream");
+
+                Header("Accept-Ranges: bytes");
+
+                Header("Accept-Length:".$file_size);
+
+                Header("Content-Disposition: attachment; filename=".urlencode($downname));
+
+                $buffer=1024;  //设置一次读取的字节数，每读取一次，就输出数据（即返回给浏览器）
+
+                $file_count=0; //读取的总字节数
+
+                //向浏览器返回数据  如果下载完成就停止输出，如果未下载完成就一直在输出。根据文件的字节大小判断是否下载完成
+
+                while(!feof($fp) && $file_count<$file_size){
+                    $file_con=fread($fp,$buffer);
+                    $file_count+=$buffer;
+                    echo $file_con;
+                }
+
+                fclose($fp);
+
+                //下载完成后删除压缩包，临时文件夹
+
+                if($file_count >= $file_size) {
+                    unlink($file_name);
+                }
+
+            }catch(\Exception $e){
+
+            }
+
+
+
+        }
+    }
+
+    /*打包下载*/
+    public function zipdownload($file_path,$file_path_name,$downname)
+    {
+        $file_template = $this->root_dir.'/../zip/empty.zip';
+        $file_name = $this->root_dir.'/../zip/'.$downname;//把你打包后zip所存放的目录
+
+        copy( $file_template, $file_name );
+
+        $zip = new ZipArchive();
+
+
+        if ($zip->open($file_name, ZipArchive::CREATE) === TRUE) {
+
+            if(count($file_path_name)){
+                foreach($file_path_name as $v){
+                    $l_path = $this->root_dir.$file_path.$v;
+
+                    if (is_dir($l_path)){
+
+                        $zip->addEmptyDir($v);
+
+
+                        zipDir($zip,$l_path,$v);
+
+                    }else{
+                        $zip->addFile($l_path,$v);
+
+                    }
+                }
+            }
+
+
+            $zip->close();
+
+
+            return $file_name;
+
+
+
+        }
+
+
     }
 
     /*删除文件，根据路径*/
